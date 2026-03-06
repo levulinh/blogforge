@@ -90,15 +90,16 @@ python -m blog_manager -t "My topic" -i "casual tone"
 |----------|----------|-------------|
 | `OPENROUTER_API_KEY` | ✅ | OpenRouter API key (used for all LLM + image generation) |
 | `TAVILY_API_KEY` | ✅ | Tavily search API key |
+| `BLOG_DIR` | ✅ | Absolute path to the root of your Jekyll blog repository |
 | `OPENROUTER_MODEL` | ❌ | Override default LLM model (default: `anthropic/claude-3.5-sonnet`) |
 | `OPENROUTER_IMAGE_MODEL` | ❌ | Override image generation model (default: `openai/dall-e-3`) |
 
 ## Output
 
-Blog posts are saved to `../levulinh.github.io/_posts/YYYY-MM-DD-<slug>.md` with:
-- Jekyll frontmatter (layout, title, date, description, tags, giscus_comments)
+Blog posts are saved to `$BLOG_DIR/_posts/YYYY-MM-DD-<slug>.md` with:
+- Jekyll frontmatter with quoted YAML-safe title/description values and YAML list tags
 - Downloaded images in `assets/img/blog/<slug>/`
-- Jekyll figure includes for all images
+- Jekyll `figure.html` includes for all localized images
 
 ## Development
 

@@ -71,11 +71,39 @@ def _parse_frontmatter(path: Path) -> dict[str, str]:
     if len(parts) < 2:
         return {}
     fm: dict[str, str] = {}
-    for line in parts[0].strip().splitlines():
-        if ":" in line:
-            key, _, val = line.partition(":")
-            fm[key.strip()] = val.strip()
+    current_list_key: str | None = None
+    current_list_values: list[str] = []
+    for raw_line in parts[0].strip().splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if current_list_key and stripped.startswith("- "):
+            current_list_values.append(_unquote_frontmatter_value(stripped[2:].strip()))
+            continue
+        if current_list_key:
+            fm[current_list_key] = ", ".join(current_list_values)
+            current_list_key = None
+            current_list_values = []
+        if ":" not in stripped:
+            continue
+        key, _, val = stripped.partition(":")
+        key = key.strip()
+        value = val.strip()
+        if value:
+            fm[key] = _unquote_frontmatter_value(value)
+        else:
+            current_list_key = key
+    if current_list_key:
+        fm[current_list_key] = ", ".join(current_list_values)
     return fm
+
+
+def _unquote_frontmatter_value(value: str) -> str:
+    """Strip matching YAML-style quotes from simple scalar values."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -99,6 +127,32 @@ def _all_posts() -> list[Path]:
 def _find_latest_post() -> Path | None:
     posts = _all_posts()
     return max(posts, key=lambda p: p.stat().st_mtime) if posts else None
+
+
+def _snapshot_post_mtimes() -> dict[Path, int]:
+    """Capture current post modification times for save verification."""
+    if not POSTS_DIR.exists():
+        return {}
+    return {
+        path: path.stat().st_mtime_ns
+        for path in POSTS_DIR.glob("*.md")
+        if not path.name.startswith(".")
+    }
+
+
+def _detect_saved_post(before: dict[Path, int]) -> Path | None:
+    """Return the post that was newly created or modified by the latest save."""
+    candidates: list[Path] = []
+    for path in POSTS_DIR.glob("*.md"):
+        if path.name.startswith("."):
+            continue
+        previous_mtime = before.get(path)
+        current_mtime = path.stat().st_mtime_ns
+        if previous_mtime is None or current_mtime > previous_mtime:
+            candidates.append(path)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns)
 
 
 def _post_slug(post: Path) -> str:
@@ -216,6 +270,9 @@ def _tool_detail(tool_name: str, result: str) -> str:
         return f"saved {Path(url).name}" if url else ""
 
     if tool_name == "save_blog_post" and isinstance(data, dict):
+        if not data.get("success"):
+            err = str(data.get("error", "unknown error"))[:80]
+            return f"[red]FAILED:[/red] {err}"
         fname = data.get("filename") or ""
         n = data.get("images_downloaded", 0)
         img_str = f", {n} image{'s' if n != 1 else ''}" if n else ""
@@ -374,8 +431,10 @@ class ProgressHooks(RunHooksBase):
 # Pipeline runner
 # ---------------------------------------------------------------------------
 
-async def _run_pipeline(topic: str, instructions: str | None, dry_run: bool) -> str:
-    """Run the multi-agent pipeline. Returns the final output string."""
+async def _run_pipeline(
+    topic: str, instructions: str | None, dry_run: bool
+) -> tuple[str, Path | None]:
+    """Run the multi-agent pipeline and verify that non-dry runs produced a saved post."""
     prompt_parts = [f"Topic: {topic}"]
     if instructions:
         prompt_parts.append(f"User instructions: {instructions}")
@@ -386,6 +445,7 @@ async def _run_pipeline(topic: str, instructions: str | None, dry_run: bool) -> 
     user_prompt = "\n\n".join(prompt_parts)
 
     orchestrator = create_orchestrator_agent()
+    posts_before = _snapshot_post_mtimes()
 
     with Live(
         Panel(Text("Initializing agents…", style="dim"),
@@ -397,7 +457,17 @@ async def _run_pipeline(topic: str, instructions: str | None, dry_run: bool) -> 
         hooks = ProgressHooks(live)
         result = await Runner.run(orchestrator, user_prompt, max_turns=30, hooks=hooks)
 
-    return str(result.final_output) if result.final_output else ""
+    final_output = str(result.final_output) if result.final_output else ""
+    if dry_run:
+        return final_output, None
+
+    saved_post = _detect_saved_post(posts_before)
+    if saved_post is None:
+        raise RuntimeError(
+            "The pipeline finished without creating or updating a blog post. "
+            "No saved file was detected."
+        )
+    return final_output, saved_post
 
 
 # ---------------------------------------------------------------------------
@@ -524,9 +594,14 @@ def write(
     console.print()
 
     try:
-        final_output = asyncio.run(_run_pipeline(topic, instructions, dry_run))
+        final_output, saved_post = asyncio.run(_run_pipeline(topic, instructions, dry_run))
     except KeyboardInterrupt:
         console.print("\n[red]Interrupted.[/red]")
+        return
+    except RuntimeError as exc:
+        console.print()
+        console.print(Rule("[bold red]❌ Save Failed", style="red"))
+        console.print(f"[red]{exc}[/red]")
         return
 
     console.print()
@@ -537,19 +612,18 @@ def write(
     if dry_run:
         return
 
-    post_path = _find_latest_post()
-    if not post_path:
+    if saved_post is None:
         return
 
-    _post_write_flow(post_path, auto_deploy=deploy, show_preview=not no_preview)
+    _post_write_flow(saved_post, auto_deploy=deploy, show_preview=not no_preview)
 
 
 # ---------------------------------------------------------------------------
 # Post-write interactive loop: preview → revise / publish / done
 # ---------------------------------------------------------------------------
 
-async def _run_revision_pipeline(post_filename: str, revision_prompt: str) -> str:
-    """Re-run the pipeline to revise an existing post."""
+async def _run_revision_pipeline(post_filename: str, revision_prompt: str) -> tuple[str, Path]:
+    """Re-run the pipeline to revise an existing post and verify it was saved."""
     prompt = (
         f"REVISION TASK: Revise the existing blog post '{post_filename}'.\n\n"
         "Steps:\n"
@@ -561,6 +635,7 @@ async def _run_revision_pipeline(post_filename: str, revision_prompt: str) -> st
         f"Revision instructions from user:\n{revision_prompt}"
     )
     orchestrator = create_orchestrator_agent()
+    posts_before = _snapshot_post_mtimes()
     with Live(
         Panel(Text("Revising post…", style="dim"),
               title="[bold cyan]🤖 Agents at work[/bold cyan]  [dim]0s[/dim]",
@@ -570,7 +645,13 @@ async def _run_revision_pipeline(post_filename: str, revision_prompt: str) -> st
     ) as live:
         hooks = ProgressHooks(live)
         result = await Runner.run(orchestrator, prompt, max_turns=20, hooks=hooks)
-    return str(result.final_output) if result.final_output else ""
+    saved_post = _detect_saved_post(posts_before)
+    if saved_post is None:
+        raise RuntimeError(
+            "The revision pipeline finished without updating the blog post. "
+            "No saved file change was detected."
+        )
+    return (str(result.final_output) if result.final_output else "", saved_post)
 
 
 def _post_write_flow(post_path: Path, *, auto_deploy: bool, show_preview: bool) -> None:
@@ -615,18 +696,17 @@ def _post_write_flow(post_path: Path, *, auto_deploy: bool, show_preview: bool) 
                 console.print("[yellow]No revision entered — try again.[/yellow]")
                 continue
             try:
-                asyncio.run(_run_revision_pipeline(post_path.name, revision))
+                _, post_path = asyncio.run(_run_revision_pipeline(post_path.name, revision))
             except KeyboardInterrupt:
                 console.print("\n[red]Revision cancelled.[/red]")
                 continue
+            except RuntimeError as exc:
+                console.print(f"\n[red]{exc}[/red]")
+                continue
             console.print()
             console.print(Rule("[bold green]✅ Revision Complete", style="green"))
-            # Refresh metadata (title may have changed)
-            new = _find_latest_post()
-            if new:
-                post_path = new
-                fm = _parse_frontmatter(post_path)
-                title = fm.get("title", post_path.stem)
+            fm = _parse_frontmatter(post_path)
+            title = fm.get("title", post_path.stem)
 
         elif choice == "2":
             _do_deploy(post_path, title)
@@ -746,4 +826,3 @@ def deploy(filename: str | None) -> None:
         return
 
     _do_deploy(post_path, title)
-

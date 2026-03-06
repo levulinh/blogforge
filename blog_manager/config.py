@@ -15,7 +15,10 @@ load_dotenv()
 set_tracing_disabled(True)
 
 # Blog directories
-BLOG_DIR = Path(os.environ.get("BLOG_DIR", "/Volumes/ex-ssd/workspace/levulinh.github.io"))
+_blog_dir_env = os.getenv("BLOG_DIR")
+if not _blog_dir_env:
+    raise ValueError("BLOG_DIR environment variable is required (path to your Jekyll blog root)")
+BLOG_DIR = Path(_blog_dir_env).expanduser().resolve()
 POSTS_DIR = BLOG_DIR / "_posts"
 ASSETS_IMG_DIR = BLOG_DIR / "assets" / "img" / "blog"
 

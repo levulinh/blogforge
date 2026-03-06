@@ -25,9 +25,12 @@ Call `research_topic` with the user's topic to gather comprehensive information 
 Call `write_blog_post` with:
 - The research JSON from Step 1
 - The user's extra instructions (tone, format, style) if provided
+- A reminder that the default post shape is 900-1400 words with 5 main sections unless the user
+  overrides that requirement
 
 **Step 3 — CRITIQUE**
-Call `critique_post` with the draft JSON from Step 2.
+Call `critique_post` with the draft JSON from Step 2 and ensure it checks Markdown/Jekyll
+formatting compliance.
 
 **Step 4 — REVISE (if needed)**
 If the critique score is < 7 or `approved` is false:
@@ -37,17 +40,28 @@ If the critique score is < 7 or `approved` is false:
 
 **Step 5 — SAVE**
 Once the post is approved (score >= 7):
-- Extract title, description, tags (space-separated string), content, images, and illustrations
-  from the writer's latest JSON output
+- Extract title, description, tags, content, images, and illustrations from the writer's latest
+  JSON output
 - If the critic provided `revised_content`, use that as the content instead
 - Call `save_blog_post` with all these fields
 
 When calling `save_blog_post`:
-- `tags` must be a space-separated string (e.g. "python ai tutorial")
+- `tags` should be passed as a JSON array string (e.g. '["python", "ai", "tutorial"]')
 - `images` must be a JSON array string: '[{"url":"...","description":"..."}]'
 - `illustrations` must be a JSON array string: '[{"url":"...","description":"..."}]'
+- The saved markdown must use quoted YAML scalars where needed, YAML list syntax for tags, and
+  `figure.html` includes for localized images
 
-Finish by reporting the saved file path and a brief summary of what was published.
+**CRITICAL — save result handling:**
+`save_blog_post` always returns JSON. Check the result EVERY time you call it:
+- If `{"success": true, ...}` → the post was saved; report the filename and continue
+- If `{"success": false, "error": "..."}` → the save FAILED; you MUST read the error message,
+  fix the underlying problem (e.g. malformed JSON, missing field, wrong type), and call
+  `save_blog_post` again with the corrected arguments. Do NOT summarise the post, apologise, or
+  stop — retry until the save succeeds or you have exhausted 3 attempts.
+
+Saving is mandatory. Do not produce a final answer unless `save_blog_post` returned
+`{"success": true, ...}`. Report the saved `filename` in your final response.
 """
 
 
@@ -74,7 +88,9 @@ def create_orchestrator_agent() -> Agent:
                 tool_description=(
                     "Write a Jekyll blog post draft. "
                     "Pass the research JSON and user instructions in a single message. "
-                    "Returns JSON with title, description, tags, content, images, illustrations."
+                    "Returns JSON with title, description, tags, content, images, illustrations. "
+                    "The default structure is 900-1400 words with 5 main sections unless the "
+                    "user overrides it."
                 ),
             ),
             critic.as_tool(
@@ -82,7 +98,8 @@ def create_orchestrator_agent() -> Agent:
                 tool_description=(
                     "Critique a blog post draft. "
                     "Pass the blog post JSON and user instructions. "
-                    "Returns JSON with approved, overall_score, strengths, feedback."
+                    "Returns JSON with approved, overall_score, strengths, feedback. "
+                    "The review must include markdown/Jekyll formatting compliance."
                 ),
             ),
             save_blog_post,

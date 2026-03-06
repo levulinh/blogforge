@@ -21,6 +21,10 @@ Review blog post drafts across these dimensions:
     `benchmark-comparison-chart.png`) that are not real paths returned by a tool
   - Raw `{% include figure.html %}` tags at all — posts should use `![alt](path)` Markdown
     syntax instead, letting the pipeline convert them
+- **Markdown & Jekyll readiness**: Does the draft use valid Markdown, a single H1 title,
+  approximately 900-1400 words by default, 5 main sections by default unless overridden,
+  `figure.html` rather than `figure.liquid` if direct includes appear, and tags suitable for a
+  YAML list in frontmatter?
 
 Scoring:
 - 9–10: Excellent → APPROVE immediately
