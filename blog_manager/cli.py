@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +168,39 @@ def _tool_detail(tool_name: str, result: str) -> str:
     except (json.JSONDecodeError, TypeError):
         return ""
 
+    if tool_name == "research_topic" and isinstance(data, dict):
+        topic = (data.get("topic") or "")[:40]
+        n_findings = len(data.get("key_findings") or [])
+        n_sources = len(data.get("sources") or [])
+        parts = []
+        if topic:
+            parts.append(f'"{topic}"')
+        if n_findings:
+            parts.append(f"{n_findings} finding{'s' if n_findings != 1 else ''}")
+        if n_sources:
+            parts.append(f"{n_sources} source{'s' if n_sources != 1 else ''}")
+        return " · ".join(parts)
+
+    if tool_name == "write_blog_post" and isinstance(data, dict):
+        title = (data.get("title") or "")[:50]
+        word_count = len((data.get("content") or "").split())
+        parts = []
+        if title:
+            parts.append(f'"{title}"')
+        if word_count:
+            parts.append(f"~{word_count} words")
+        return " · ".join(parts)
+
+    if tool_name == "critique_post" and isinstance(data, dict):
+        score = data.get("overall_score")
+        approved = data.get("approved")
+        status = (
+            "[green]✓ approved[/green]"
+            if approved
+            else "[red]✗ revision needed[/red]"
+        )
+        return f"score: {score}/10 · {status}" if score is not None else status
+
     if tool_name == "tavily_search" and isinstance(data, dict):
         items = data.get("results", [])
         count = len(items)
@@ -193,6 +227,28 @@ def _tool_detail(tool_name: str, result: str) -> str:
     return ""
 
 
+def _tool_input_detail(tool_name: str, args_str: str) -> str:
+    """Return a short human-readable summary of what a tool is about to do."""
+    try:
+        args = json.loads(args_str)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+    if tool_name == "tavily_search":
+        q = (args.get("query") or "")[:55]
+        return f'"{q}"' if q else ""
+
+    if tool_name == "read_blog_post":
+        return (args.get("filename") or "")[:50]
+
+    # Agent-as-tool: input is a plain-string message — show the first line as topic hint
+    if tool_name == "research_topic":
+        inp = str(args.get("input") or "")
+        return inp.splitlines()[0][:60] if inp else ""
+
+    return ""
+
+
 class ProgressHooks(RunHooksBase):
     """RunHooks that show a rich live display of agent/tool activity."""
 
@@ -202,6 +258,8 @@ class ProgressHooks(RunHooksBase):
         self._status_agent = ""   # name of agent currently running a tool
         self._status_tool = ""    # label of tool currently in flight
         self._start = time.monotonic()
+        # Queue of pending tool-call argument strings, keyed by tool name
+        self._pending_inputs: dict[str, deque[str]] = defaultdict(deque)
 
     # -- rendering ------------------------------------------------------------
 
@@ -265,24 +323,49 @@ class ProgressHooks(RunHooksBase):
         to_lbl = _AGENT_LABELS.get(to_agent.name, to_agent.name)
         self._push(f"  [dim]⟶[/dim] {from_lbl} [dim]→[/dim] {to_lbl}")
 
+    async def on_llm_end(
+        self, context: RunContextWrapper, agent: Agent, response: Any
+    ) -> None:
+        """Capture upcoming tool-call arguments so on_tool_start can display them."""
+        for item in getattr(response, "output", []):
+            if getattr(item, "type", None) == "function_call":
+                self._pending_inputs[item.name].append(item.arguments)
+
     async def on_tool_start(
         self, context: RunContextWrapper, agent: Agent, tool: Any
     ) -> None:
         self._status_agent = agent.name
         name = getattr(tool, "name", "")
-        self._status_tool = _TOOL_LABELS.get(name, f"🔧 {name}")
+        base_label = _TOOL_LABELS.get(name, f"🔧 {name}")
+        pending = self._pending_inputs.get(name)
+        input_detail = _tool_input_detail(name, pending[0]) if pending else ""
+        self._status_tool = (
+            f"{base_label}  [dim]{input_detail}[/dim]" if input_detail else base_label
+        )
         self._refresh()
 
     async def on_tool_end(
         self, context: RunContextWrapper, agent: Agent, tool: Any, result: str
     ) -> None:
         name = getattr(tool, "name", "")
+        pending = self._pending_inputs.get(name)
+        if pending:
+            pending.popleft()
         label = _TOOL_LABELS.get(name, f"🔧 {name}")
         detail = _tool_detail(name, result)
         self._push(
             f"    [green]✓[/green] {label}"
             + (f"  [dim]↳ {detail}[/dim]" if detail else "")
         )
+        # For the critic: surface top feedback items when revision is needed
+        if name == "critique_post":
+            try:
+                data = json.loads(result)
+                if not data.get("approved", True):
+                    for fb in (data.get("feedback") or [])[:2]:
+                        self._push(f"      [dim]• {str(fb)[:80]}[/dim]")
+            except (json.JSONDecodeError, TypeError):
+                pass
         self._status_tool = ""
         self._refresh()
 

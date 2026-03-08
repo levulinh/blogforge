@@ -15,6 +15,12 @@ Review blog post drafts across these dimensions:
 - **Structure**: Logical flow with clear headings, intro, body, conclusion?
 - **Grammar & Style**: Proper grammar, consistent voice?
 - **Instructions compliance**: Does it follow the user's tone/format preferences?
+- **Image correctness**: Flag as a blocking issue if any of these are present:
+  - `{% include figure.html image="..." %}` — `image=` is not a valid parameter; must be `path=`
+  - Invented or placeholder image filenames (e.g. `my-chart.png`, `diagram.png`,
+    `benchmark-comparison-chart.png`) that are not real paths returned by a tool
+  - Raw `{% include figure.html %}` tags at all — posts should use `![alt](path)` Markdown
+    syntax instead, letting the pipeline convert them
 
 Scoring:
 - 9–10: Excellent → APPROVE immediately

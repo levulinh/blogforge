@@ -15,7 +15,7 @@ load_dotenv()
 set_tracing_disabled(True)
 
 # Blog directories
-BLOG_DIR = Path("/Volumes/ex-ssd/workspace/levulinh.github.io")
+BLOG_DIR = Path(os.environ.get("BLOG_DIR", "/Volumes/ex-ssd/workspace/levulinh.github.io"))
 POSTS_DIR = BLOG_DIR / "_posts"
 ASSETS_IMG_DIR = BLOG_DIR / "assets" / "img" / "blog"
 

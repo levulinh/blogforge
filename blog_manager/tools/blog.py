@@ -136,7 +136,7 @@ def save_blog_post(
         processed_content = re.sub(
             rf"!\[([^\]]*)\]\({re.escape(url)}\)",
             lambda m, lp=rel_path: (
-                '{%- include figure.liquid'
+                '{%- include figure.html'
                 f' path="{lp}"'
                 f' alt="{m.group(1)}"'
                 ' class="img-fluid rounded z-depth-1" -%}'
@@ -161,7 +161,7 @@ def save_blog_post(
         if fname in saved_by_name:
             rel = saved_by_name[fname]
             return (
-                '{%- include figure.liquid'
+                '{%- include figure.html'
                 f' path="{rel}"'
                 f' alt="{alt}"'
                 ' class="img-fluid rounded z-depth-1" -%}'
