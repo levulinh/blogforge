@@ -6,11 +6,25 @@ build-backend = "hatchling.build"
 package = true
 
 [project]
-name = "blog-manager"
+name = "blogforge"
 version = "0.1.0"
-description = "Multi-agent blog management system using OpenAI Agents SDK"
+description = "AI-powered multi-agent system that researches, writes, and publishes Jekyll blog posts automatically"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
+keywords = ["blog", "jekyll", "ai", "agents", "llm", "automation", "openai", "openrouter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Text Processing :: Markup",
+]
 dependencies = [
     "openai-agents>=0.0.7",
     "tavily-python>=0.5.0",
@@ -22,6 +36,7 @@ dependencies = [
 ]
 
 [project.scripts]
+blogforge = "blog_manager.cli:main"
 blog-manager = "blog_manager.cli:main"
 
 [dependency-groups]

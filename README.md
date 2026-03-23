@@ -1,122 +1,234 @@
-# Blog Manager
-
-A multi-agent CLI system that writes and publishes blog posts to your Jekyll blog. Powered by the **OpenAI Agents SDK**, **OpenRouter** (LLM + image generation), and **Tavily** (web search + images).
-
-## Architecture
+<div align="center">
 
 ```
-User (topic + instructions)
-        │
-        ▼
-  Orchestrator Agent
-        │
-        ├──tool──► Researcher Agent   →  Tavily web search (text + images)
-        │
-        ├──tool──► Writer Agent       →  OpenRouter image generation + blog style reference
-        │                                (loops back if Critic requests revisions)
-        ├──tool──► Critic Agent       →  quality review (score 1-10, approve at 7+)
-        │
-        └──tool──► save_blog_post     →  downloads images, writes _posts/YYYY-MM-DD-slug.md
+ ██████╗ ██╗      ██████╗  ██████╗    ███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+ ██╔══██╗██║     ██╔═══██╗██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+ ██████╔╝██║     ██║   ██║██║  ███╗   █████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+ ██╔══██╗██║     ██║   ██║██║   ██║   ██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+ ██████╔╝███████╗╚██████╔╝╚██████╔╝   ██║     ╚██████╔╝██║  ██╗╚██████╔╝███████╗
+ ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝    ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ```
 
-All agents and image generation are powered by **OpenRouter** using a single API key.
+**AI-powered multi-agent system that researches, writes, and publishes Jekyll blog posts automatically.**
 
-## Prerequisites
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/levulinh/blogforge)](https://github.com/levulinh/blogforge/commits/main)
+[![Stars](https://img.shields.io/github/stars/levulinh/blogforge?style=flat)](https://github.com/levulinh/blogforge/stargazers)
+[![Issues](https://img.shields.io/github/issues/levulinh/blogforge)](https://github.com/levulinh/blogforge/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/levulinh/blogforge/pulls)
 
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/) package manager
-- API keys for:
-  - [OpenRouter](https://openrouter.ai/keys) — LLM + image generation (all AI)
-  - [Tavily](https://app.tavily.com) — web search with images
+[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI-Agents%20SDK-412991?logo=openai&logoColor=white)](https://github.com/openai/openai-agents-python)
+[![Powered by OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-6C47FF?logoColor=white)](https://openrouter.ai)
+[![Tavily](https://img.shields.io/badge/Search-Tavily-0EA5E9?logoColor=white)](https://tavily.com)
 
-## Setup
+</div>
+
+---
+
+BlogForge is a **multi-agent CLI tool** that turns a topic into a publication-ready Jekyll blog post — complete with web research, AI-generated illustrations, quality review, and automatic file saving. No manual writing. No copy-pasting images. Just run it and publish.
+
+## How It Works
+
+```
+You type a topic
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Orchestrator Agent                     │
+│                                                             │
+│  1. Researcher ──► Tavily web search (facts + images)       │
+│  2. Writer     ──► Drafts post + generates illustrations    │
+│  3. Critic     ──► Scores 1-10, requests revisions if < 7   │
+│  4. Writer     ──► Revises (if needed, max 2 rounds)        │
+│  5. Save       ──► Downloads images, writes Jekyll Markdown │
+└─────────────────────────────────────────────────────────────┘
+      │
+      ▼
+_posts/2025-01-15-your-topic.md  ✓
+assets/img/blog/your-topic/      ✓
+```
+
+All agents, image generation, and reasoning are powered by a single **OpenRouter** API key. Swap models per-agent without changing code.
+
+## Demo
+
+<div align="center">
+
+**CLI banner & command reference**
+
+![BlogForge help screen](docs/screenshots/help.png)
+
+**Agent pipeline — research → write → critique → save**
+
+![BlogForge pipeline run](docs/screenshots/pipeline.png)
+
+</div>
+
+## Features
+
+- **Fully automated pipeline** — research → draft → review → save, no human in the loop required
+- **Quality gating** — Critic agent scores every post (1-10) and blocks low-quality output; revision loops run automatically
+- **AI illustrations** — Generates images via OpenRouter (DALL-E 3, Gemini Imagen, etc.) and embeds them with Jekyll-compatible includes
+- **Web research** — Tavily search brings in current facts, sources, and real images from the web
+- **Jekyll-native output** — Correct frontmatter, `figure.html` includes, date-slug filenames, local image paths
+- **Per-agent model selection** — Run your orchestrator on Claude Opus, writer on Sonnet, researcher on Haiku — all independently configurable
+- **Rich terminal UI** — Live streaming output, agent step visualization, post preview in terminal
+- **Dry-run mode** — Generate and preview without saving to your blog
+
+## Quick Start
+
+### 1. Install
 
 ```bash
-# 1. Clone / navigate to the project
-cd blog_manager/
+git clone https://github.com/levulinh/blogforge.git
+cd blogforge
 
-# 2. Create virtual environment and install dependencies
-python3 -m venv .venv
-source .venv/bin/activate
+# With uv (recommended)
+uv sync
+
+# Or with pip
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
+```
 
-# 3. Configure API keys
+### 2. Configure
+
+```bash
 cp .env.example .env
-# Edit .env and fill in your API keys
 ```
 
-## Usage
+Edit `.env` with your API keys:
 
-### Interactive mode
+```env
+OPENROUTER_API_KEY=sk-or-...    # https://openrouter.ai/keys
+TAVILY_API_KEY=tvly-...         # https://app.tavily.com
+BLOG_DIR=/path/to/your/jekyll   # root of your Jekyll repo
+```
+
+### 3. Run
 
 ```bash
+# Interactive — prompts for topic and instructions
 python -m blog_manager
-```
 
-You'll be prompted for:
-1. **Blog topic** — what to write about
-2. **Extra instructions** — optional tone/format/style preferences
+# Or provide everything via flags
+python -m blog_manager --topic "The rise of agentic AI" --instructions "casual tone, include code examples"
 
-Example session:
-```
-📌 Enter your blog topic: The future of agentic AI systems
-📝 Extra instructions: casual tone, include code examples, end with a call to action
-```
-
-### CLI flags
-
-```bash
-# Provide topic and instructions directly
-python -m blog_manager --topic "Rust vs Python for data science" --instructions "technical, include benchmarks"
-
-# Dry run — generate but don't save to blog
+# Preview without saving
 python -m blog_manager --topic "My topic" --dry-run
-
-# Short flags
-python -m blog_manager -t "My topic" -i "casual tone"
 ```
-
-### Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--topic` | `-t` | Blog topic to write about |
-| `--instructions` | `-i` | Extra instructions (tone, format, style) |
-| `--dry-run` | | Research and write but don't save to blog |
 
 ## Configuration
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key (used for all LLM + image generation) |
-| `TAVILY_API_KEY` | ✅ | Tavily search API key |
-| `BLOG_DIR` | ✅ | Absolute path to the root of your Jekyll blog repository |
-| `OPENROUTER_MODEL` | ❌ | Override default LLM model (default: `anthropic/claude-3.5-sonnet`) |
-| `OPENROUTER_IMAGE_MODEL` | ❌ | Override image generation model (default: `openai/dall-e-3`) |
+### Required
+
+| Variable | Description |
+|----------|-------------|
+| `OPENROUTER_API_KEY` | OpenRouter key — used for all LLM calls and image generation |
+| `TAVILY_API_KEY` | Tavily key — used for web search with images |
+| `BLOG_DIR` | Absolute path to the root of your Jekyll blog repository |
+
+### Optional — Model Selection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | Default model for all agents |
+| `OPENROUTER_IMAGE_MODEL` | `openai/dall-e-3` | Image generation model |
+| `ORCHESTRATOR_MODEL` | inherits default | Override orchestrator model |
+| `RESEARCHER_MODEL` | inherits default | Override researcher model |
+| `WRITER_MODEL` | inherits default | Override writer model |
+| `CRITIC_MODEL` | inherits default | Override critic model |
+| `OPENROUTER_REASONING_EFFORT` | *(unset)* | `low` \| `medium` \| `high` for reasoning models (e.g. DeepSeek R1) |
+
+### Example: Cost-optimized setup
+
+```env
+ORCHESTRATOR_MODEL=anthropic/claude-3.5-sonnet
+RESEARCHER_MODEL=anthropic/claude-3-haiku
+WRITER_MODEL=anthropic/claude-3.5-sonnet
+CRITIC_MODEL=anthropic/claude-3-haiku
+```
+
+## CLI Reference
+
+```
+python -m blog_manager [OPTIONS]
+
+Options:
+  -t, --topic TEXT         Blog topic to write about
+  -i, --instructions TEXT  Extra instructions (tone, format, style)
+  --dry-run                Generate post but don't save to blog
+  --help                   Show this message and exit
+```
 
 ## Output
 
-Blog posts are saved to `$BLOG_DIR/_posts/YYYY-MM-DD-<slug>.md` with:
-- Jekyll frontmatter with quoted YAML-safe title/description values and YAML list tags
-- Downloaded images in `assets/img/blog/<slug>/`
-- Jekyll `figure.html` includes for all localized images
+Each run produces a publication-ready Jekyll post:
 
-## Development
+```
+$BLOG_DIR/
+├── _posts/
+│   └── 2025-01-15-the-rise-of-agentic-ai.md   ← frontmatter + content
+└── assets/
+    └── img/
+        └── blog/
+            └── the-rise-of-agentic-ai/
+                ├── hero.jpg                     ← downloaded/generated images
+                └── illustration-1.png
+```
 
-```bash
-# Linting
-.venv/bin/ruff check blog_manager/
-.venv/bin/ruff format blog_manager/
+The Markdown file includes proper Jekyll frontmatter:
 
-# Type checking
-.venv/bin/ty check blog_manager/
+```yaml
+---
+layout: post
+title: "The Rise of Agentic AI"
+description: "How autonomous AI agents are changing software development"
+tags: [ai, agents, llm]
+image:
+  path: /assets/img/blog/the-rise-of-agentic-ai/hero.jpg
+---
 ```
 
 ## Agents
 
 | Agent | Role | Tools |
 |-------|------|-------|
-| **Orchestrator** | Coordinates the pipeline | research_topic, write_blog_post, critique_post, save_blog_post |
-| **Researcher** | Web research with images | tavily_search |
-| **Writer** | Drafts Jekyll Markdown posts | list_blog_posts, read_blog_post, generate_illustration |
-| **Critic** | Quality review (score 1-10) | *(none — pure LLM reasoning)* |
+| **Orchestrator** | Runs the full pipeline, coordinates all agents | `research_topic`, `write_blog_post`, `critique_post`, `save_blog_post` |
+| **Researcher** | Multi-angle web search, gathers facts and source images | `tavily_search` |
+| **Writer** | Reads your existing posts to match your voice, drafts Jekyll Markdown | `list_blog_posts`, `read_blog_post`, `generate_illustration` |
+| **Critic** | Reviews quality (clarity, accuracy, structure) and scores 1-10; blocks posts scoring < 7 | *(pure reasoning — no tools)* |
+| **Trend Researcher** | Suggests 4-6 trending topics ranked by timeliness | `tavily_search` |
+
+## Requirements
+
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [OpenRouter](https://openrouter.ai/keys) API key
+- [Tavily](https://app.tavily.com) API key
+- A Jekyll blog repository
+
+## Development
+
+```bash
+# Lint + format
+uv run ruff check blog_manager/
+uv run ruff format blog_manager/
+
+# Type check
+uv run ty check blog_manager/
+```
+
+## Contributing
+
+Contributions are welcome. Please open an issue first to discuss significant changes.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/your-feature`)
+3. Commit your changes
+4. Open a pull request
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.

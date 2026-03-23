@@ -30,13 +30,13 @@ from blog_manager.pipeline.trend_researcher import create_trend_researcher_agent
 console = Console()
 
 _BANNER = """\
-[bold cyan] ██████╗ ██╗      ██████╗  ██████╗     ███╗   ███╗ ██████╗ ██████╗ [/bold cyan]
-[bold cyan] ██╔══██╗██║     ██╔═══██╗██╔════╝     ████╗ ████║██╔════╝ ██╔══██╗[/bold cyan]
-[bold cyan] ██████╔╝██║     ██║   ██║██║  ███╗    ██╔████╔██║██║  ███╗██████╔╝[/bold cyan]
-[bold cyan] ██╔══██╗██║     ██║   ██║██║   ██║    ██║╚██╔╝██║██║   ██║██╔══██╗[/bold cyan]
-[bold cyan] ██████╔╝███████╗╚██████╔╝╚██████╔╝    ██║ ╚═╝ ██║╚██████╔╝██║  ██║[/bold cyan]
-[bold cyan] ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝     ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝[/bold cyan]
-[dim]Multi-Agent Blog Manager · OpenAI Agents SDK + OpenRouter + Tavily[/dim]"""
+[bold cyan] ██████╗ ██╗      ██████╗   ██████╗    ███████╗ ██████╗ ██████╗   ██████╗ ███████╗[/bold cyan]
+[bold cyan] ██╔══██╗██║     ██╔═══██╗ ██╔════╝    ██╔════╝██╔═══██╗██╔══██╗ ██╔════╝ ██╔════╝[/bold cyan]
+[bold cyan] ██████╔╝██║     ██║   ██║ ██║  ███╗   █████╗  ██║   ██║██████╔╝ ██║  ███╗█████╗  [/bold cyan]
+[bold cyan] ██╔══██╗██║     ██║   ██║ ██║   ██║   ██╔══╝  ██║   ██║██╔══██╗ ██║   ██║██╔══╝  [/bold cyan]
+[bold cyan] ██████╔╝███████╗╚██████╔╝ ╚██████╔╝   ██║     ╚██████╔╝██║  ██╗ ╚██████╔╝███████╗[/bold cyan]
+[bold cyan] ╚═════╝ ╚══════╝ ╚═════╝   ╚═════╝    ╚═╝      ╚═════╝ ╚═╝  ╚═╝  ╚═════╝ ╚══════╝[/bold cyan]
+[dim]BlogForge · OpenAI Agents SDK + OpenRouter + Tavily[/dim]"""
 
 _AGENT_LABELS: dict[str, str] = {
     "Orchestrator": "🎯 Orchestrator",
