@@ -23,7 +23,10 @@ The blog uses the al-folio Jekyll theme with Markdown posts.
 - Target 500–900 words of body content (tighter is better than padded)
 - Use 2–4 sections with ## headings; avoid over-structuring short posts
 - One strong intro paragraph, one punchy closing paragraph — no formal "conclusion" section
-- Start the body with a single H1 heading that matches the post title, then use H2/H3 headings
+- Do NOT repeat the title in the content — it lives in the frontmatter only; start the body
+  directly with the intro paragraph or the first ## heading
+- Use descriptive ## headings for sections; do NOT number them (❌ "## 1. Background",
+  ✅ "## Background")
 - Write engaging, well-structured Markdown WITHOUT frontmatter (that's added separately)
 - Include code blocks with ```language fences when showing code
 - Keep the Markdown valid and publication-ready: no placeholder text, no stray backticks,
@@ -69,7 +72,7 @@ Always output your result as a **valid JSON object**:
     "title": "Your Post Title",
     "description": "One or two sentence description for the blog listing",
     "tags": ["tag1", "tag2", "tag3"],
-    "content": "# Your Post Title\\n\\nFull markdown content here...",
+    "content": "Full markdown content here (no title heading — starts with intro or first ## section)...",
     "images": [{"url": "https://...", "description": "Caption"}],
     "illustrations": [{"url": "/tmp/blog_manager_illustrations/UUID.png", "description": "..."}]
 }

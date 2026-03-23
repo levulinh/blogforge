@@ -25,6 +25,7 @@ from rich.text import Text
 
 from blog_manager.config import ASSETS_IMG_DIR, BLOG_DIR, POSTS_DIR
 from blog_manager.pipeline.orchestrator import create_orchestrator_agent
+from blog_manager.pipeline.trend_researcher import create_trend_researcher_agent
 
 console = Console()
 
@@ -40,6 +41,7 @@ _BANNER = """\
 _AGENT_LABELS: dict[str, str] = {
     "Orchestrator": "🎯 Orchestrator",
     "Researcher": "🔍 Researcher",
+    "TrendResearcher": "📈 Trend Researcher",
     "Writer": "✍️  Writer",
     "Critic": "🔎 Critic",
 }
@@ -485,13 +487,14 @@ def main(ctx: click.Context) -> None:
         _interactive_menu_loop(ctx)
 
 
-_EXIT_MENU = "5"  # key that maps to "Exit"
+_EXIT_MENU = "6"  # key that maps to "Exit"
 
 _MENU_ITEMS = [
     ("1", "✍️  Write a new post", "write"),
-    ("2", "📚 List all posts", "list"),
-    ("3", "📖 View a post", "view"),
-    ("4", "🚀 Deploy a post", "deploy"),
+    ("2", "📈 Trend research", "trends"),
+    ("3", "📚 List all posts", "list"),
+    ("4", "📖 View a post", "view"),
+    ("5", "🚀 Deploy a post", "deploy"),
     (_EXIT_MENU, "🚪 Exit", None),
 ]
 
@@ -616,6 +619,173 @@ def write(
         return
 
     _post_write_flow(saved_post, auto_deploy=deploy, show_preview=not no_preview)
+
+
+# ---------------------------------------------------------------------------
+# Trend research
+# ---------------------------------------------------------------------------
+
+_TREND_CATEGORIES = ["AI", "Consumer tech", "Engineering", "Game dev"]
+
+
+async def _run_trend_research(category: str) -> dict:
+    """Run the trend researcher agent and return parsed results."""
+    agent = create_trend_researcher_agent()
+    with Live(
+        Panel(Text("Researching trends…", style="dim"),
+              title="[bold cyan]📈 Trend Research[/bold cyan]  [dim]0s[/dim]",
+              border_style="cyan"),
+        console=console,
+        refresh_per_second=8,
+    ) as live:
+        hooks = ProgressHooks(live)
+        result = await Runner.run(agent, category, max_turns=15, hooks=hooks)
+
+    raw = str(result.final_output) if result.final_output else ""
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
+    return json.loads(cleaned)
+
+
+def _display_trends(data: dict) -> None:
+    """Render trend research results to the console."""
+    category = data.get("category", "")
+    trends = data.get("trends", [])
+    top_pick = data.get("top_pick", {})
+
+    console.print()
+    console.print(Rule(f"[bold cyan]📈 Trending in: {category}", style="cyan"))
+    console.print()
+
+    for i, trend in enumerate(trends, 1):
+        title = trend.get("trend", "")
+        desc = trend.get("description", "")
+        suggested = trend.get("suggested_topic", "")
+        why = trend.get("why_write_about_it", "")
+        sources = trend.get("sources", [])
+
+        panel_content = Text()
+        panel_content.append(desc, style="white")
+        panel_content.append("\n\nSuggested post: ", style="bold yellow")
+        panel_content.append(suggested, style="italic white")
+        if why:
+            panel_content.append(f"\n{why}", style="dim")
+        if sources:
+            panel_content.append("\n\nSources: ", style="dim")
+            panel_content.append(", ".join(sources[:3]), style="dim cyan")
+
+        console.print(Panel(
+            panel_content,
+            title=f"[bold cyan]{i}.[/bold cyan] [bold]{title}[/bold]",
+            border_style="cyan",
+            padding=(0, 1),
+        ))
+
+    if top_pick:
+        console.print()
+        top_text = Text()
+        top_text.append(top_pick.get("topic", ""), style="bold white")
+        top_text.append(f"\n{top_pick.get('reason', '')}", style="dim")
+        console.print(Panel(
+            top_text,
+            title="[bold green]⭐ Top Pick[/bold green]",
+            border_style="green",
+        ))
+
+
+@main.command()
+def trends() -> None:
+    """Research trending topics in a category and suggest blog post ideas."""
+    console.print("[bold yellow]Pick a category to research:[/bold yellow]\n")
+    for i, cat in enumerate(_TREND_CATEGORIES, 1):
+        console.print(f"  [bold cyan]{i}[/bold cyan]  {cat}")
+    console.print(f"  [bold cyan]{len(_TREND_CATEGORIES) + 1}[/bold cyan]  Other (type your own)")
+    console.print()
+
+    choice = Prompt.ask(
+        "[bold yellow]Select[/bold yellow]",
+        choices=[str(i) for i in range(1, len(_TREND_CATEGORIES) + 2)],
+        default="1",
+    )
+
+    idx = int(choice) - 1
+    if idx < len(_TREND_CATEGORIES):
+        category = _TREND_CATEGORIES[idx]
+    else:
+        category = Prompt.ask("[bold yellow]Enter your category[/bold yellow]").strip()
+        if not category:
+            console.print("[yellow]No category entered.[/yellow]")
+            return
+
+    console.print()
+    task_text = Text()
+    task_text.append("Category: ", style="bold yellow")
+    task_text.append(category, style="white")
+    console.print(Panel(task_text, title="[bold]📈 Trend Research", border_style="yellow"))
+    console.print()
+
+    try:
+        data = asyncio.run(_run_trend_research(category))
+    except KeyboardInterrupt:
+        console.print("\n[red]Interrupted.[/red]")
+        return
+    except (json.JSONDecodeError, Exception) as exc:
+        console.print(f"\n[red]Error parsing trend results:[/red] {exc}")
+        return
+
+    _display_trends(data)
+
+    # Offer to write a post based on a trend
+    trends_list = data.get("trends", [])
+    if not trends_list:
+        return
+
+    console.print()
+    write_choice = Prompt.ask(
+        "[bold yellow]Write a post? Pick a trend number or press Enter to skip[/bold yellow]",
+        default="",
+    )
+    if not write_choice:
+        return
+
+    try:
+        trend_idx = int(write_choice) - 1
+        if trend_idx < 0 or trend_idx >= len(trends_list):
+            raise ValueError
+    except ValueError:
+        console.print("[yellow]Invalid selection.[/yellow]")
+        return
+
+    selected = trends_list[trend_idx]
+    topic = selected.get("suggested_topic", selected.get("trend", ""))
+    console.print(f"\n[bold]Starting post on:[/bold] {topic}\n")
+
+    console.print("[dim]Optional: tone, format, style — e.g. 'casual, listicle format'[/dim]")
+    raw = Prompt.ask(
+        "[bold yellow]📝 Extra instructions[/bold yellow] [dim](Enter to skip)[/dim]",
+        default="",
+    )
+    instructions = raw.strip() or None
+
+    try:
+        final_output, saved_post = asyncio.run(_run_pipeline(topic, instructions, dry_run=False))
+    except KeyboardInterrupt:
+        console.print("\n[red]Interrupted.[/red]")
+        return
+    except RuntimeError as exc:
+        console.print()
+        console.print(Rule("[bold red]❌ Save Failed", style="red"))
+        console.print(f"[red]{exc}[/red]")
+        return
+
+    console.print()
+    console.print(Rule("[bold green]✅ Pipeline Complete", style="green"))
+    if final_output:
+        console.print(Panel(final_output, title="[bold green]📄 Result", border_style="green"))
+
+    if saved_post:
+        _post_write_flow(saved_post, auto_deploy=False, show_preview=True)
 
 
 # ---------------------------------------------------------------------------

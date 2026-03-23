@@ -163,6 +163,12 @@ def _save_blog_post_impl(
         if local_path:
             url_to_local[img_url] = f"assets/img/blog/{slug}/{local_filename}"
 
+    # Strip any leading H1 heading that duplicates the frontmatter title
+    stripped = content.lstrip()
+    if stripped.startswith("# "):
+        first_newline = stripped.find("\n")
+        content = stripped[first_newline:].lstrip() if first_newline != -1 else ""
+
     # Replace markdown image references with Jekyll figure includes
     processed_content = content
     for img_url, rel_path in url_to_local.items():
